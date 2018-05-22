@@ -221,11 +221,9 @@ class LabelPrinter:
             layout = make_text_layout(self.text, INIT_FONTSIZE)
             w,h = layout.get_pixel_size()
             fs = int(INIT_FONTSIZE * self.width_px / w * 0.99)
-            print("FONT",fs)
             layout = make_text_layout(self.text, fs)
             self.font_size = fs
             w,h = layout.get_pixel_size()
-            print("WHn",w,h, self.width_px)
             ctx.move_to(self.width_px/2 - w/2, 0)
             ctx.set_source_rgb(0, 0, 0)
             PangoCairo.show_layout(ctx, layout)
