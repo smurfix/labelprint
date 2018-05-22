@@ -114,7 +114,8 @@ def get_code(s):
 
 class LabelPrinter:    
     PAGE_WIDTH=38
-    SIDE_MARGIN=1
+    LEFT_MARGIN=1
+    RIGHT_MARGIN=1
     TOP_MARGIN=2
     BOTTOM_MARGIN=1
 
@@ -142,7 +143,7 @@ class LabelPrinter:
 
     @property
     def width_px(self):
-        return int(RES * (self.PAGE_WIDTH-self.SIDE_MARGIN*2) + 0.9999)
+        return int(RES * (self.PAGE_WIDTH-self.LEFT_MARGIN-self.RIGHT_MARGIN) + 0.9999)
 
     @property
     def height_px(self):
@@ -161,8 +162,8 @@ class LabelPrinter:
         setup = Gtk.PageSetup()
         setup.set_paper_size(paper)
         setup.set_bottom_margin(self.BOTTOM_MARGIN, Gtk.Unit.MM)
-        setup.set_left_margin(self.SIDE_MARGIN, Gtk.Unit.MM)
-        setup.set_right_margin(self.SIDE_MARGIN, Gtk.Unit.MM)
+        setup.set_left_margin(self.LEFT_MARGIN, Gtk.Unit.MM)
+        setup.set_right_margin(self.RIGHT_MARGIN, Gtk.Unit.MM)
         setup.set_top_margin(self.TOP_MARGIN, Gtk.Unit.MM)
         return setup
 
@@ -185,7 +186,7 @@ class LabelPrinter:
 
             op.set_default_page_setup(setup)
             op.set_print_settings(settings)
-            res = op.run(Gtk.PrintOperationAction.PRINT_DIALOG)
+            res = op.run(Gtk.PrintOperationAction.PRINT_DIALOG if force else Gtk.PrintOperationAction.PRINT)
 
             if res != Gtk.PrintOperationResult.CANCEL or self.selected_printer is None:
                 raise RuntimeError("You need to click 'Print'.")
@@ -242,7 +243,7 @@ class LabelPrinter:
         else:
             h = 0
             self.font_size = 0
-            fs = INIT_FONTSIZE
+            fs = 2*INIT_FONTSIZE
 
         if bars is not None:
             s = int(self.width_px / bars.get_width())
@@ -257,9 +258,10 @@ class LabelPrinter:
             h += self.BAR_H
 
             # add text to the label.
-            # The text is at most 70% of the main text, may cover 1/3rd of the barcode height
-            # and must be somewhat narrower than the code
-            bfs = fs * 0.7
+            # The text is at most as large as the main text,
+            # may cover 1/3rd of the barcode height,
+            # and must be somewhat narrower than the barcode
+            bfs = fs
             layout = make_text_layout(self.barcode, bfs)
             lw,lh = layout.get_pixel_size()
             sfh = RES*self.BAR_H/3/lh
@@ -271,7 +273,7 @@ class LabelPrinter:
                 lw,lh = layout.get_pixel_size()
 
             ctx.set_source_rgb(1, 1, 1)
-            ctx.rectangle(self.width_px/2 - lw/2 -lh/6, h*RES-lh, lw+lh/3,lh)
+            ctx.rectangle(self.width_px/2 - lw/2 - lh/6, h*RES-lh, lw+lh/3, lh+1)
             ctx.fill()
 
             ctx.set_source_rgb(0, 0, 0)
@@ -286,13 +288,14 @@ class LabelPrinter:
         setup = self.get_page_setup()
         op = Gtk.PrintOperation()
         op.set_default_page_setup(setup)
+
         op.set_print_settings(self.print_settings)
         #op.set_default_page_setup(self.page_setup)
         op.set_unit(Gtk.Unit.MM)
         op.connect("begin_print", self.begin_print)
         op.connect("draw_page", self.draw_page)
 
-        res = op.run(Gtk.PrintOperationAction.PREVIEW if preview else Gtk.PrintOperationAction.PRINT)
+        res = op.run(Gtk.PrintOperationAction.PREVIEW if preview else Gtk.PrintOperationAction.PRINT_DIALOG)
     
     def scan_print(self, operation, context):
         width = context.get_width()
@@ -317,10 +320,11 @@ class LabelPrinter:
         self.gen_page(ctx)
 
     def draw_image(self, ctx):
-        ctx.rectangle(self.SIDE_MARGIN,self.TOP_MARGIN,self.PAGE_WIDTH-2*self.SIDE_MARGIN,self.height-self.TOP_MARGIN-self.BOTTOM_MARGIN)
+        #ctx.rectangle(self.LEFT_MARGIN,self.TOP_MARGIN,self.PAGE_WIDTH-self.LEFT_MARGIN-self.RIGHT_MARGIN,self.height-self.TOP_MARGIN-self.BOTTOM_MARGIN)
+        ctx.rectangle(0, 0, self.PAGE_WIDTH,self.height)
         p = 1/RES
         ctx.scale(p,p)
-        ctx.set_source_surface(self.content, self.SIDE_MARGIN/p, self.TOP_MARGIN/p)
+        ctx.set_source_surface(self.content, self.LEFT_MARGIN/p, self.TOP_MARGIN/p)
         ctx.set_antialias(cairo.ANTIALIAS_NONE)
         ctx.fill()
 
