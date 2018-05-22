@@ -108,8 +108,8 @@ def get_code(s):
         return "ITF"
     elif any(1 for x in s if ord(x) > 127 or ord(x) < 32):
         raise RuntimeError("cannot emit " + repr(s))
-    elif s == s.upper():
-        return "Code39"
+#    elif s == s.upper():
+#        return "Code39"
     else:
         return "Code128"
 
