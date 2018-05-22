@@ -194,6 +194,15 @@ class LabelPrinter:
     def reflow(self):
         if not self._need_reflow:
             return False
+
+        self.content = cairo.RecordingSurface(cairo.Content.COLOR,None)
+        self.content.set_fallback_resolution(RES_I,RES_I)
+        ctx = cairo.Context(self.content)
+        ctx.set_antialias(cairo.ANTIALIAS_NONE)
+        self.gen_page(ctx)
+        return True
+
+    def gen_page(self, ctx):
         if self.barcode:
             bars = pybars.get(get_code(self.barcode), self.barcode, writer=ImageWriter())
             bars = bars.render(writer_options=dict(format="PNG", write_text=False))
@@ -203,11 +212,6 @@ class LabelPrinter:
                 bars = pil2cairo(bars)
         else:
             bars = None
-
-        self.content = cairo.RecordingSurface(cairo.Content.COLOR,None)
-        self.content.set_fallback_resolution(RES_I,RES_I)
-        ctx = cairo.Context(self.content)
-        ctx.set_antialias(cairo.ANTIALIAS_NONE)
 
         # start with a white background
         # otherwise things get interesting
@@ -275,7 +279,6 @@ class LabelPrinter:
             PangoCairo.show_layout(ctx, layout)
 
         self.height = h+self.TOP_MARGIN+self.BOTTOM_MARGIN
-        return True
 
     def print(self, preview=False):
         self.setup_page()
@@ -304,7 +307,14 @@ class LabelPrinter:
         pass
 
     def draw_page (self, operation, context, page_number):
-        self.draw_image(context.get_cairo_context())
+        #self.draw_image(context.get_cairo_context())
+        self.draw_direct_image(context.get_cairo_context())
+
+    def draw_direct_image(self, ctx):
+        #ctx.translate(self.LEFT_MARGIN,self.TOP_MARGIN)
+        p = 1/RES
+        ctx.scale(p,p)
+        self.gen_page(ctx)
 
     def draw_image(self, ctx):
         ctx.rectangle(self.SIDE_MARGIN,self.TOP_MARGIN,self.PAGE_WIDTH-2*self.SIDE_MARGIN,self.height-self.TOP_MARGIN-self.BOTTOM_MARGIN)
