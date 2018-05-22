@@ -106,7 +106,7 @@ if len(sys.argv) > 1:
 def get_code(s):
     if s.isdigit():
         return "ITF"
-    elif any(1 for x in s if ord(x) > 127 or ord(x) < 32)
+    elif any(1 for x in s if ord(x) > 127 or ord(x) < 32):
         raise RuntimeError("cannot emit " + repr(s))
     elif s == s.upper():
         return "Code39"
