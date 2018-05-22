@@ -157,20 +157,6 @@ class LabelPrinter:
         self.text = text
         self._need_reflow = True
 
-    def setup(self):
-        # display printer setup dialog
-    
-        # , action=None, data=None, barcode=None, filename=None):
-        self.layout = None
-        self.font_size=12
-        if action==None:
-            # By default set the print action to preview
-            action = Gtk.PRINT_OPERATION_ACTION_PREVIEW
-        
-        # Paper Size 
-        #paper_size = Gtk.PaperSize(Gtk.PAPER_NAME_A4)
-
-
     def setup_page(self):
         paper = Gtk.PaperSize.new_custom("Endless","Endless",self.PAGE_WIDTH,self.height,Gtk.Unit.MM)
         setup = Gtk.PageSetup()
