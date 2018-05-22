@@ -102,14 +102,15 @@ if len(sys.argv) > 1:
             print_text.append(x.strip())
 
 def get_code(s):
-    if s.isdigit():
-        return "ITF"
-    elif any(1 for x in s if ord(x) > 127 or ord(x) < 32):
+    if any(1 for x in s if ord(x) > 127 or ord(x) < 32):
         raise RuntimeError("cannot emit " + repr(s))
-#    elif s == s.upper():
-#        return "Code39"
-    else:
-        return "Code128"
+## Code128 is more efficient than the others
+#   if s.isdigit():
+#       return "ITF"
+#   elif s == s.upper():
+#       return "Code39"
+#   else:
+    return "Code128"
 
 class LabelPrinter:    
     PAGE_WIDTH=38
