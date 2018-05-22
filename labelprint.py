@@ -39,6 +39,7 @@ if ImageWriter is None:
 SCALE = float(Pango.SCALE)
 RES_I = 72
 RES = RES_I/2.54 # dots per mm
+INIT_FONTSIZE=200
 
 SETTINGS = (
 ('cover-after', 'none'),
@@ -84,6 +85,7 @@ def pil2cairo(im):
     a = array.array('B', s)
     dest = cairo.ImageSurface(cairo.FORMAT_ARGB32, im.size[0], im.size[1])
     ctx = cairo.Context(dest)
+    ctx.set_antialias(cairo.ANTIALIAS_NONE)
     non_premult_src_wo_alpha = cairo.ImageSurface.create_for_data(
         a, cairo.FORMAT_RGB24, im.size[0], im.size[1])
     non_premult_src_alpha = cairo.ImageSurface.create_for_data(
@@ -104,13 +106,14 @@ if len(sys.argv) > 1:
 def get_code(s):
     if s.isdigit():
         return "ITF"
+    elif any(1 for x in s if ord(x) > 127 or ord(x) < 32)
+        raise RuntimeError("cannot emit " + repr(s))
     elif s == s.upper():
         return "Code39"
     else:
         return "Code128"
 
 class LabelPrinter:    
-    BAR_H = 6
     PAGE_WIDTH=38
     SIDE_MARGIN=1
     TOP_MARGIN=2
@@ -124,19 +127,27 @@ class LabelPrinter:
     _need_reflow = False
     height = 999
     content = None # RecordingSurface
+    font_size = 0
 
-    def __init__(self, widget=None):
+    def __init__(self):
         self.set_width(38.0)
-        self.widget = widget
+
+    @property
+    def BAR_H(self):
+        return self.PAGE_WIDTH/5
 
     def set_width(self,width):
         self.PAGE_WIDTH = width
         self.setup_page()
         self._need_reflow = True
 
-    def set_widget(self, widget):
-        self.widget = widget
-        self._need_reflow = True
+    @property
+    def width_px(self):
+        return int(RES * self.PAGE_WIDTH + 0.9999)
+
+    @property
+    def height_px(self):
+        return int(RES * self.height + 0.9999)
 
     def set_barcode(self, barcode):
         self.barcode = barcode
@@ -194,53 +205,62 @@ class LabelPrinter:
     def reflow(self):
         if not self._need_reflow:
             return False
-        if self.barcode is not None:
+        if self.barcode:
+            import pdb;pdb.set_trace()
             bars = pybars.get(get_code(self.barcode), self.barcode, writer=ImageWriter())
-            bars = bars.render(writer_options=dict(format="PNG", dpi=RES_I, quiet_zone=3, write_text=False))
-            if bars.width > RES*self.PAGE_WIDTH:
+            bars = bars.render(writer_options=dict(format="PNG", write_text=False))
+            if bars.width > self.width_px:
                 bars = None
             else:
                 bars = pil2cairo(bars)
         else:
             bars = None
 
-        self.content = cairo.RecordingSurface(cairo.Content.COLOR_ALPHA,None)
+        self.content = cairo.RecordingSurface(cairo.Content.COLOR,None)
         self.content.set_fallback_resolution(RES_I,RES_I)
         ctx = cairo.Context(self.content)
+        ctx.set_antialias(cairo.ANTIALIAS_NONE)
+#        ctx.set_source_rgb(1,1,1)
+#        ctx.paint()
 
         if self.text:
-            def pango_text_layout(fontsize):
+            def make_text_layout(fontsize):
                 layout = PangoCairo.create_layout(ctx)
                 layout.set_alignment(Pango.Alignment.CENTER)
-                layout.set_font_description(Pango.FontDescription("Sans %d" % int(fontsize)))
+                layout.set_font_description(Pango.FontDescription("Sans %d" % fontsize))
                 #layout.set_width(int(width*Pango.SCALE))
                 layout.set_width(-1)
                 layout.set_text(self.text,-1)
                 return layout
-            layout = pango_text_layout(24)
+            layout = make_text_layout(INIT_FONTSIZE)
             w,h = layout.get_pixel_size()
-            fs = 24 * RES*self.PAGE_WIDTH / w
+            fs = int(INIT_FONTSIZE * self.width_px / w * 0.99)
             print("FONT",fs)
-            layout = pango_text_layout(fs)
+            layout = make_text_layout(fs)
+            self.font_size = fs
             w,h = layout.get_pixel_size()
-            print("WHn",w,h,RES*self.PAGE_WIDTH)
-            ctx.move_to(RES*self.PAGE_WIDTH/2, 0)
+            print("WHn",w,h, self.width_px)
+            ctx.move_to(self.width_px/2 - w/2, 0)
             ctx.set_source_rgb(0, 0, 0)
             PangoCairo.show_layout(ctx, layout)
+            h /= RES # mm
         else:
             h = 0
+            self.font_size = 0
 
         if bars is not None:
-            s = int(RES*self.PAGE_WIDTH / bars.get_width())
+            s = int(self.width_px / bars.get_width())
             bw = bars.get_width() * s
 
-            ctx.set_source_surface(bars, RES*self.PAGE_WIDTH/2 - bw/2, h)
+            ctx.save()
+            ctx.scale(s,s)
+            ctx.set_source_surface(bars, (RES*self.PAGE_WIDTH/2 - bw/2)/s, h*RES/s)
+            ctx.set_antialias(cairo.ANTIALIAS_NONE)
             ctx.paint()
+            ctx.restore()
             h += self.BAR_H
-        self.height = h/RES # mm
-
-        if self.widget is not None:
-            self.widget.queue_draw()
+        self.height = h
+        return True
 
 
     def print(self):
@@ -259,11 +279,11 @@ class LabelPrinter:
     
     def scan_print(self, operation, context):
         width = context.get_width()
-        size_hint = 24
+        size_hint = INIT_FONTSIZE
         _, size_hint = self.compute_heigth_fontsize(width, size_hint)
         self.height, self.font_size = self.compute_heigth_fontsize(width, size_hint)
 
-    def compute_height_fontsize(self, width, fontsize_hint=24):
+    def compute_height_fontsize(self, width, fontsize_hint=INIT_FONTSIZE):
         
         s = cairo.whatever()
         height = context.get_height()
@@ -276,7 +296,7 @@ class LabelPrinter:
         for line in xrange(num_lines):
             self.layout = context.create_pango_layout()
             self.layout.set_alignment(Pango.ALIGN_LEFT)
-            self.layout.set_font_description(Pango.FontDescription("Sans 24"))
+            self.layout.set_font_description(Pango.FontDescription("Sans %d" % INIT_FONTSIZE))
             #self.layout.set_width(int(width*Pango.SCALE))
             self.layout.set_width(-1)
             self.layout.set_text(self.text[line])
@@ -294,7 +314,7 @@ class LabelPrinter:
         print("Pre",page_height,self.font_size,max_width)
         usable = self.PAGE_WIDTH-2*self.SIDE_MARGIN
         page_height = page_height*usable/max_width
-        self.font_size = 24*usable/max_width
+        self.font_size = INIT_FONTSIZE*usable/max_width
 
         self.height = page_height
         if self.bars is not None:
@@ -453,7 +473,6 @@ class LabelUI(object):
 
         self.widgets = Gtk.Builder()
         self.widgets.add_from_file(APPNAME+".glade")
-        self.prn.set_widget(self['img_label'])
 
         d = {}
         for k in dir(self):
@@ -492,8 +511,13 @@ class LabelUI(object):
 
         if not self.prn.reflow(): # nothing to do
             return
-        self['txt_length'].set_text("%.1f mm" % (prn.height,))
-        self['txt_fontsoze'].set_text("%.1f pt" % (prn.font_size,))
+
+        preview = self['img_label']
+        if preview is not None:
+            preview.queue_draw()
+
+        self['txt_length'].set_text("%.1f mm" % (self.prn.height,))
+        self['txt_fontsize'].set_text("%.1f pt" % (self.prn.font_size,))
 
     def _set_prn(self):
         txt = self['txt_code']
@@ -519,12 +543,29 @@ class LabelUI(object):
     def on_draw_label(self, wid, ctx):
         if not self.prn or not self.prn.content:
             return
-        import pdb;pdb.set_trace()
-        ctx.set_source_rgb(255,255,255)
-        ctx.fill()
+        ctx.save()
+        ctx.set_source_rgb(1,1,1)
+        ctx.paint()
+        w = self.prn.width_px
+        h = self.prn.height_px
+        #s = ctx.get_target()
+        #wp = s.get_width()
+        #hp = s.get_height()
+        s = wid
+        wp = wid.get_allocated_width()
+        hp = wid.get_allocated_height()
+        p = min(wp/w, hp/h)
+        if p < 0.01:
+            # Sometimes draw() is called with a null surface
+            return
+        print("SC",p,w,h,wp,hp)
+        print("R",*self.prn.content.ink_extents())
+        ctx.scale(p,p)
         ctx.set_source_surface(self.prn.content, 0, 0)
         ctx.rectangle(*self.prn.content.ink_extents())
-        ctx.fill()
+        ctx.set_antialias(cairo.ANTIALIAS_NONE)
+        ctx.paint()
+        ctx.restore()
 
     def on_barcode_changed(self, field):
         self.prn.set_barcode(field.get_text())
@@ -599,11 +640,6 @@ def _old_main():
 
     win.add(vbox)
     win.show_all()
-
-class Assoc(object):
-    def __init__(self, widgets):
-        self.widgets = widgets
-        widgets.associator = self
 
 if __name__ == '__main__':
     ui = LabelUI()
