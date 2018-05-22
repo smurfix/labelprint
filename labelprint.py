@@ -208,20 +208,21 @@ class LabelPrinter:
 #        ctx.set_source_rgb(1,1,1)
 #        ctx.paint()
 
+        def make_text_layout(text, fontsize):
+            layout = PangoCairo.create_layout(ctx)
+            layout.set_alignment(Pango.Alignment.CENTER)
+            layout.set_font_description(Pango.FontDescription("Sans %d" % fontsize))
+            #layout.set_width(int(width*Pango.SCALE))
+            layout.set_width(-1)
+            layout.set_text(text,-1)
+            return layout
+
         if self.text:
-            def make_text_layout(fontsize):
-                layout = PangoCairo.create_layout(ctx)
-                layout.set_alignment(Pango.Alignment.CENTER)
-                layout.set_font_description(Pango.FontDescription("Sans %d" % fontsize))
-                #layout.set_width(int(width*Pango.SCALE))
-                layout.set_width(-1)
-                layout.set_text(self.text,-1)
-                return layout
-            layout = make_text_layout(INIT_FONTSIZE)
+            layout = make_text_layout(self.text, INIT_FONTSIZE)
             w,h = layout.get_pixel_size()
             fs = int(INIT_FONTSIZE * self.width_px / w * 0.99)
             print("FONT",fs)
-            layout = make_text_layout(fs)
+            layout = make_text_layout(self.text, fs)
             self.font_size = fs
             w,h = layout.get_pixel_size()
             print("WHn",w,h, self.width_px)
