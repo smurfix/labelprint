@@ -206,7 +206,6 @@ class LabelPrinter:
         if not self._need_reflow:
             return False
         if self.barcode:
-            import pdb;pdb.set_trace()
             bars = pybars.get(get_code(self.barcode), self.barcode, writer=ImageWriter())
             bars = bars.render(writer_options=dict(format="PNG", write_text=False))
             if bars.width > self.width_px:
