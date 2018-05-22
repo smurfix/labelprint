@@ -23,11 +23,9 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import Gtk, Pango, GObject, Gdk, Gio, PangoCairo, GLib, GdkPixbuf
 Gdk.threads_init()
 
-#import gtkunixprint
 import sys
 import math
 import cairo
-#import gnome.ui
 import PIL
 import PIL.ImageOps
 import PIL.ImageChops
@@ -143,7 +141,7 @@ class LabelPrinter:
 
     @property
     def width_px(self):
-        return int(RES * self.PAGE_WIDTH + 0.9999)
+        return int(RES * (self.PAGE_WIDTH-self.SIDE_MARGIN*2) + 0.9999)
 
     @property
     def height_px(self):
@@ -157,15 +155,18 @@ class LabelPrinter:
         self.text = text
         self._need_reflow = True
 
-    def setup_page(self, force=False):
-        paper = Gtk.PaperSize.new_custom("Endless","Endless",self.PAGE_WIDTH,self.height,Gtk.Unit.MM)
+    def get_page_setup(self):
+        paper = Gtk.PaperSize.new_custom("Endless","Endless", self.PAGE_WIDTH, self.height+self.TOP_MARGIN+self.BOTTOM_MARGIN, Gtk.Unit.MM)
         setup = Gtk.PageSetup()
         setup.set_paper_size(paper)
-        setup.set_bottom_margin(0, Gtk.Unit.MM)
+        setup.set_bottom_margin(self.BOTTOM_MARGIN, Gtk.Unit.MM)
         setup.set_left_margin(self.SIDE_MARGIN, Gtk.Unit.MM)
         setup.set_right_margin(self.SIDE_MARGIN, Gtk.Unit.MM)
         setup.set_top_margin(self.TOP_MARGIN, Gtk.Unit.MM)
+        return setup
 
+    def setup_page(self, force=False):
+        setup = self.get_page_setup()
         if force or self.selected_printer is None:
             settings = Gtk.PrintSettings()
             for a,b in SETTINGS:
@@ -181,6 +182,7 @@ class LabelPrinter:
                 op.cancel()
             op.connect("begin_print", do_begin)
 
+            op.set_default_page_setup(setup)
             op.set_print_settings(settings)
             res = op.run(Gtk.PrintOperationAction.PRINT_DIALOG)
 
@@ -205,9 +207,13 @@ class LabelPrinter:
         self.content.set_fallback_resolution(RES_I,RES_I)
         ctx = cairo.Context(self.content)
         ctx.set_antialias(cairo.ANTIALIAS_NONE)
-#        ctx.set_source_rgb(1,1,1)
-#        ctx.paint()
 
+        # start with a white background
+        # otherwise things get interesting
+        ctx.set_source_rgb(1, 1, 1)
+        ctx.rectangle(0,0, self.width_px,999*RES)
+        ctx.fill()
+        
         def make_text_layout(text, fontsize):
             layout = PangoCairo.create_layout(ctx)
             layout.set_alignment(Pango.Alignment.CENTER)
@@ -267,22 +273,22 @@ class LabelPrinter:
             ctx.move_to(self.width_px/2 - lw/2, h*RES-lh)
             PangoCairo.show_layout(ctx, layout)
 
-        self.height = h
+        self.height = h+self.TOP_MARGIN+self.BOTTOM_MARGIN
         return True
 
-    def print(self):
-        self.reflow()
-        paper_size = Gtk.PaperSize.new_custom("Endless","Endless",self.PAGE_WIDTH,self.height+self.TOP_MARGIN+self.BOTTOM_MARGIN,Gtk.Unit.MM)
-        self.page_setup.set_paper_size(paper_size)
+    def print(self, preview=False):
+        self.setup_page()
+
+        setup = self.get_page_setup()
         op = Gtk.PrintOperation()
-        op.set_default_page_setup(self.page_setup)
+        op.set_default_page_setup(setup)
+        op.set_print_settings(self.print_settings)
+        #op.set_default_page_setup(self.page_setup)
         op.set_unit(Gtk.Unit.MM)
         op.connect("begin_print", self.begin_print)
         op.connect("draw_page", self.draw_page)
 
-        if action == Gtk.PRINT_OPERATION_ACTION_EXPORT:
-            op.set_export_filename(filename)
-        res = op.run(action)
+        res = op.run(Gtk.PrintOperationAction.PREVIEW if preview else Gtk.PrintOperationAction.PRINT)
     
     def scan_print(self, operation, context):
         width = context.get_width()
@@ -297,90 +303,15 @@ class LabelPrinter:
         pass
 
     def draw_page (self, operation, context, page_number):
-        self.draw_image(context)
+        self.draw_image(context.get_cairo_context())
 
-    def draw_image(self, context):
-        layout = context.create_pango_layout()
-        layout.set_alignment(Pango.ALIGN_CENTER)
-        layout.set_font_description(Pango.FontDescription("Sans "+str(self.font_size)))
-        #layout.set_width(int(width*Pango.SCALE))
-        layout.set_width(-1)
-        layout.set_text("\n".join(self.text))
-        
-        cr = context.get_cairo_context()
-        cr.set_source_rgb(0, 0, 0)
-        
-        pr, lr = layout.get_extents()
-        cr.move_to(0,0)
-        cr.show_layout(layout)
-
-##        for line in xrange(num_lines):
-##            line = iter.get_line()
-##            _, logical_rect = iter.get_line_extents()
-##            x_bearing, y_bearing, lwidth, lheight = logical_rect
-##            baseline = iter.get_baseline()
-##            if i == 0:
-##                start_pos = y_bearing / SCALE
-##            print("at",logical_rect,baseline,start_pos,line)
-##            cr.move_to(x_bearing / SCALE, baseline / SCALE - start_pos)
-##            cr.show_layout_line(line)
-##            i += 1
-
-        if self.bars is not None:
-            # get the image
-            stream = Gio.MemoryInputStream.new_from_bytes(GLib.Bytes.new(self.bars))
-            pixbuf = GdkPixbuf.Pixbuf.new_from_stream(stream, None)
-            cr.set_source_pixbuf(pixbuf, 0, lr[3]/SCALE)
-            s = context.get_width()/pixbuf.get_width()
-            cr.scale(s,s)
-            #self.svgwidget = Gtk.Image.new_from_pixbuf(pixbuf)
-##            m = PIL.ImageOps.grayscale(self.bars)
-##            m = PIL.ImageOps.invert(m)
-##            b = self.bars.convert("RGBA")
-##            b.putalpha(m)
-##
-##            # chop off the top (white-only) rows of the barcode
-##            bg = PIL.Image.new(b.mode, b.size, b.getpixel((0, 0)))
-##            diff = PIL.ImageChops.difference(b, bg)
-##            dbox = diff.getbbox()
-##            bbox = b.getbbox()
-##            bbox = (bbox[0], dbox[1], bbox[2], dbox[3])
-##            b = b.crop(bbox)
-##
-##            # copy the barcode onto the image.
-##            # TODO: use the buffer instead of going through PNG.
-##            s = io.BytesIO()
-##            b.save(s,"PNG")
-##            s.seek(0)
-##            img = cairo.ImageSurface.create_from_png(s)
-##            s = context.get_width()/img.get_width()
-##            cr.scale(s,s)
-##            cr.set_antialias(cairo.ANTIALIAS_NONE)
-##            #cr.set_operator(cairo.OPERATOR_ADD)
-##            cr.set_source_surface(img, 0, lr[3]/SCALE/s) # self.height-self.BAR_H)
-##            cr.paint()
-            
-            # Print the barcode text. First, undo the scaling.
-##            cr.scale(1/s,1/s)
-            layout = context.create_pango_layout()
-            layout.set_alignment(Pango.ALIGN_CENTER)
-            layout.set_font_description(Pango.FontDescription("Sans "+str(self.font_size*0.7)))
-            #layout.set_width(int(width*Pango.SCALE))
-            layout.set_width(-1)
-            layout.set_text(self.barcode)
-            
-            cr.set_source_rgb(0, 0, 0)
-            
-            npr, nlr = layout.get_extents()
-            tw = layout.get_extents()[1][2]/SCALE
-            pw = cr.clip_extents()
-            pw = pw[2]
-            cr.translate(pw/2-tw/2,lr[3]/SCALE+self.BAR_H+(npr[1]-npr[3])/SCALE)
-            cr.set_source_rgb(1, 1, 1)
-            cr.rectangle(nlr[0]/SCALE-0.5, nlr[1]/SCALE-0.2, nlr[2]/SCALE+1, nlr[3]/SCALE+1)
-            cr.fill()
-            cr.set_source_rgb(0, 0, 0)
-            cr.show_layout(layout)
+    def draw_image(self, ctx):
+        ctx.rectangle(self.SIDE_MARGIN,self.TOP_MARGIN,self.PAGE_WIDTH-2*self.SIDE_MARGIN,self.height-self.TOP_MARGIN-self.BOTTOM_MARGIN)
+        p = 1/RES
+        ctx.scale(p,p)
+        ctx.set_source_surface(self.content, self.SIDE_MARGIN/p, self.TOP_MARGIN/p)
+        ctx.set_antialias(cairo.ANTIALIAS_NONE)
+        ctx.fill()
 
 APPNAME="labelprint"
 APPVERSION="0.1"
@@ -480,8 +411,6 @@ class LabelUI(object):
         if p < 0.01:
             # Sometimes draw() is called with a null surface
             return
-        print("SC",p,w,h,wp,hp)
-        print("R",*self.prn.content.ink_extents())
         ctx.scale(p,p)
         ctx.set_source_surface(self.prn.content, 0, 0)
         ctx.rectangle(*self.prn.content.ink_extents())
@@ -506,8 +435,18 @@ class LabelUI(object):
         self._will_reflow()
 
     def on_setup_clicked(self,*foo):
-        print("setup",*foo)
         self.prn.setup_page(True)
+        self.reflow()
+
+    def on_p_press(self,btn,ev):
+        st = ev.get_state()
+        self.did_shift = bool(st & st.SHIFT_MASK)
+
+    def on_p_release(self,*foo):
+        pass
+
+    def on_print_clicked(self,*foo):
+        self.prn.print(preview=self.did_shift)
         self.reflow()
 
     def on_main_destroy(self,window):
