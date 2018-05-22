@@ -157,7 +157,7 @@ class LabelPrinter:
         self.text = text
         self._need_reflow = True
 
-    def setup_page(self):
+    def setup_page(self, force=False):
         paper = Gtk.PaperSize.new_custom("Endless","Endless",self.PAGE_WIDTH,self.height,Gtk.Unit.MM)
         setup = Gtk.PageSetup()
         setup.set_paper_size(paper)
@@ -166,7 +166,7 @@ class LabelPrinter:
         setup.set_right_margin(self.SIDE_MARGIN, Gtk.Unit.MM)
         setup.set_top_margin(self.TOP_MARGIN, Gtk.Unit.MM)
 
-        if self.selected_printer is None:
+        if force or self.selected_printer is None:
             settings = Gtk.PrintSettings()
             for a,b in SETTINGS:
                 settings.set(a,b)
@@ -571,7 +571,7 @@ class LabelUI(object):
 
     def on_setup_clicked(self,*foo):
         print("setup",*foo)
-        self.prn.setup()
+        self.prn.setup_page(True)
         self.reflow()
 
     def on_main_destroy(self,window):
