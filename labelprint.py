@@ -231,6 +231,7 @@ class LabelPrinter:
         else:
             h = 0
             self.font_size = 0
+            fs = INIT_FONTSIZE
 
         if bars is not None:
             s = int(self.width_px / bars.get_width())
@@ -243,6 +244,29 @@ class LabelPrinter:
             ctx.paint()
             ctx.restore()
             h += self.BAR_H
+
+            # add text to the label.
+            # The text is at most 70% of the main text, may cover 1/3rd of the barcode height
+            # and must be somewhat narrower than the code
+            bfs = fs * 0.7
+            layout = make_text_layout(self.barcode, bfs)
+            lw,lh = layout.get_pixel_size()
+            sfh = RES*self.BAR_H/3/lh
+            sfw = bw/1.2/lw
+            sf = min(sfw,sfh)
+            if sf < 1:
+                bfs *= sf
+                layout = make_text_layout(self.barcode, bfs)
+                lw,lh = layout.get_pixel_size()
+
+            ctx.set_source_rgb(1, 1, 1)
+            ctx.rectangle(self.width_px/2 - lw/2 -lh/6, h*RES-lh, lw+lh/3,lh)
+            ctx.fill()
+
+            ctx.set_source_rgb(0, 0, 0)
+            ctx.move_to(self.width_px/2 - lw/2, h*RES-lh)
+            PangoCairo.show_layout(ctx, layout)
+
         self.height = h
         return True
 
