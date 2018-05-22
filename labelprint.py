@@ -270,7 +270,6 @@ class LabelPrinter:
         self.height = h
         return True
 
-
     def print(self):
         self.reflow()
         paper_size = Gtk.PaperSize.new_custom("Endless","Endless",self.PAGE_WIDTH,self.height+self.TOP_MARGIN+self.BOTTOM_MARGIN,Gtk.Unit.MM)
@@ -290,45 +289,6 @@ class LabelPrinter:
         size_hint = INIT_FONTSIZE
         _, size_hint = self.compute_heigth_fontsize(width, size_hint)
         self.height, self.font_size = self.compute_heigth_fontsize(width, size_hint)
-
-    def compute_height_fontsize(self, width, fontsize_hint=INIT_FONTSIZE):
-        
-        s = cairo.whatever()
-        height = context.get_height()
-        print(width)
-        page_height = 0
-        max_width = 0
-        num_lines = len(self.text)
-        print("num_lines: ", num_lines)
-
-        for line in xrange(num_lines):
-            self.layout = context.create_pango_layout()
-            self.layout.set_alignment(Pango.ALIGN_LEFT)
-            self.layout.set_font_description(Pango.FontDescription("Sans %d" % INIT_FONTSIZE))
-            #self.layout.set_width(int(width*Pango.SCALE))
-            self.layout.set_width(-1)
-            self.layout.set_text(self.text[line])
-
-            layout_line = self.layout.get_line(0)
-            ink_rect, logical_rect = layout_line.get_extents()
-            x_bearing, y_bearing, lwidth, lheight = logical_rect
-            if max_width < lwidth/SCALE:
-                max_width = lwidth/SCALE
-
-            line_height = lheight / SCALE
-            page_height += line_height
-            print(ink_rect, logical_rect, page_height)
-
-        print("Pre",page_height,self.font_size,max_width)
-        usable = self.PAGE_WIDTH-2*self.SIDE_MARGIN
-        page_height = page_height*usable/max_width
-        self.font_size = INIT_FONTSIZE*usable/max_width
-
-        self.height = page_height
-        if self.bars is not None:
-            self.height += self.BAR_H
-        print("Post",self.height,self.font_size)
-        #self.page_breaks = page_breaks
 
     def begin_print(self, operation, context):
         operation.set_n_pages(1) # len(page_breaks) + 1)
@@ -351,7 +311,6 @@ class LabelPrinter:
         cr.set_source_rgb(0, 0, 0)
         
         pr, lr = layout.get_extents()
-        print(pr,lr)
         cr.move_to(0,0)
         cr.show_layout(layout)
 
@@ -413,7 +372,6 @@ class LabelPrinter:
             cr.set_source_rgb(0, 0, 0)
             
             npr, nlr = layout.get_extents()
-            print(pr,lr,cr.get_matrix())
             tw = layout.get_extents()[1][2]/SCALE
             pw = cr.clip_extents()
             pw = pw[2]
@@ -423,50 +381,6 @@ class LabelPrinter:
             cr.fill()
             cr.set_source_rgb(0, 0, 0)
             cr.show_layout(layout)
-
-def on_print_preview(widget=None):
-    """
-    Show the print preview.
-    """
-    global print_text,print_barcode
-    global printer
-    action = Gtk.PRINT_OPERATION_ACTION_PREVIEW
-    printer = LabelPrinter(action, data=print_text, barcode=print_barcode)
-
-def on_print_export(widget=None):
-    """
-    Export to a file. This requires the "export-filename" property to be set.
-    """
-    print("on_print_export")
-    global print_text, print_barcode
-    action = Gtk.PRINT_OPERATION_ACTION_EXPORT
-    printer = LabelPrinter(action, data=print_text, barcode=print_barcode, filename="MyPDFDocument.pdf")
-
-def on_print_dialog(widget=None):
-    """
-    Show the print dialog.
-    """
-    global print_text, print_barcode
-    action = Gtk.PRINT_OPERATION_ACTION_PRINT_DIALOG
-    printer = LabelPrinter(action, data=print_text, barcode=print_barcode)
-
-def on_print_immediately(widget=None):
-    """
-    Start printing immediately without showing the print dialog.
-    Based on the current print settings.
-    """
-    global print_text, print_barcode
-    action = Gtk.PRINT_OPERATION_ACTION_PRINT
-    printer = LabelPrinter(action, data=print_text, barcode=print_barcode)
-
-def on_file_selected(widget=None):
-    global print_text, print_barcode
-    data=[]
-    with open(widget.get_filename(), "r") as f:
-        print_barcode = f.readline().strip()
-        for x in f.readlines():
-            data.append(x.strip())
-    print_text=data
 
 APPNAME="labelprint"
 APPVERSION="0.1"
@@ -606,48 +520,6 @@ class LabelUI(object):
 
     def on_quit_clicked(self,x):
         Gtk.main_quit()
-
-
-
-def _old_main():
-    """
-    PyGTK GUI to test gnome printing technologies
-    """
-    global printer
-    printer = LabelPrinter()
-
-    data=None
-    win = Gtk.Window()
-
-    win.connect("delete_event", lambda w,e: Gtk.main_quit())
-    
-    vbox = Gtk.VBox(False, 0)
-    hbox = Gtk.HBox(False, 0)
-    
-    button_open = Gtk.FileChooserButton("Open File")
-    button_open.connect("selection-changed", on_file_selected)
-    
-    print_preview = Gtk.Button("Print Preview")
-    print_preview.connect("clicked", on_print_preview)
-
-    print_immediately = Gtk.Button("Print Immediately")
-    print_immediately.connect("clicked", on_print_immediately)
-
-    print_export = Gtk.Button("Export to PDF")
-    print_export.connect("clicked", on_print_export)
-
-    print_dialog = Gtk.Button("Print Dialog")
-    print_dialog.connect("clicked", on_print_dialog)
-
-    hbox.pack_start(print_dialog, True, True, 5)
-    hbox.pack_start(print_immediately, True, True, 5)
-    hbox.pack_start(print_export, True, True, 5)
-    hbox.pack_start(print_preview, True, True, 5)
-    vbox.pack_start(button_open, False, True, 5)
-    vbox.pack_start(hbox, False, True, 5)
-
-    win.add(vbox)
-    win.show_all()
 
 if __name__ == '__main__':
     ui = LabelUI()
