@@ -240,6 +240,11 @@ class LabelPrinter:
             ctx.set_source_rgb(0, 0, 0)
             PangoCairo.show_layout(ctx, layout)
 
+            layout = make_text_layout(self.text+'q', fs)
+            ex = layout.get_extents()
+            bot = (ex[0].y+ex[0].height) / SCALE
+            h = bot
+
             if False:
                 ctx.save()
                 ctx.set_source_rgb(255, 0, 0)
