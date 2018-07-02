@@ -239,6 +239,15 @@ class LabelPrinter:
             ctx.move_to(self.width_px/2 - w/2, 0)
             ctx.set_source_rgb(0, 0, 0)
             PangoCairo.show_layout(ctx, layout)
+
+            if False:
+                ctx.save()
+                ctx.set_source_rgb(255, 0, 0)
+                ctx.rectangle(self.width_px/2 - w/2, self.TOP_MARGIN*RES, w, h)
+                ctx.set_line_width(2)
+                ctx.stroke()
+                ctx.restore()
+
             h /= RES # mm
         else:
             h = 0
@@ -255,6 +264,14 @@ class LabelPrinter:
             ctx.set_antialias(cairo.ANTIALIAS_NONE)
             ctx.paint()
             ctx.restore()
+
+            if False:
+                ctx.save()
+                ctx.set_source_rgb(255, 0, 0)
+                ctx.rectangle(int((self.width_px/2 - bw/2)), int(h*RES), int(bw), int(RES*self.BAR_H))
+                ctx.stroke()
+                ctx.restore()
+
             h += self.BAR_H
 
             # add text to the label.
