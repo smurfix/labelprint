@@ -232,7 +232,7 @@ class LabelPrinter:
         if self.text:
             layout = make_text_layout(self.text, INIT_FONTSIZE)
             w,h = layout.get_pixel_size()
-            fs = int(INIT_FONTSIZE * self.width_px / w * 0.99)
+            fs = int(INIT_FONTSIZE * self.width_px / w * 0.95)
             layout = make_text_layout(self.text, fs)
             self.font_size = fs
             w,h = layout.get_pixel_size()
