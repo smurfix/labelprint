@@ -255,6 +255,7 @@ class LabelPrinter:
                 ctx.restore()
 
             h /= RES # mm
+            h += 0.3 # space between label and barcode
         else:
             h = 0
             self.font_size = 0
