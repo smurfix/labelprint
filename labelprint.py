@@ -227,6 +227,7 @@ class LabelPrinter:
             #layout.set_width(int(width*Pango.SCALE))
             layout.set_width(-1)
             layout.set_text(text,-1)
+            layout.set_spacing(-1.5*RES*SCALE)
             return layout
 
         if self.text:
