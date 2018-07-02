@@ -236,7 +236,7 @@ class LabelPrinter:
             layout = make_text_layout(self.text, fs)
             self.font_size = fs
             w,h = layout.get_pixel_size()
-            ctx.move_to(self.width_px/2 - w/2, 0)
+            ctx.move_to(self.width_px/2 - w/2, self.TOP_MARGIN*RES)
             ctx.set_source_rgb(0, 0, 0)
             PangoCairo.show_layout(ctx, layout)
 
@@ -253,6 +253,7 @@ class LabelPrinter:
             h = 0
             self.font_size = 0
             fs = 2*INIT_FONTSIZE
+        h += self.TOP_MARGIN
 
         if bars is not None:
             s = int(self.width_px / bars.get_width())
@@ -260,9 +261,11 @@ class LabelPrinter:
 
             ctx.save()
             ctx.scale(s,s)
-            ctx.set_source_surface(bars, (RES*self.PAGE_WIDTH/2 - bw/2)/s, h*RES/s)
+            ctx.set_source_surface(bars, (RES*self.PAGE_WIDTH/2 - bw/2 - RES*self.LEFT_MARGIN)/s, h*RES/s-bars.get_height()/5)
             ctx.set_antialias(cairo.ANTIALIAS_NONE)
-            ctx.paint()
+            #ctx.set_operator(cairo.OPERATOR_DARKEN)
+            ctx.rectangle(int((self.width_px/2 - bw/2)/s), int(h*RES/s), int(bw/s), int(RES*self.BAR_H/s))
+            ctx.fill()
             ctx.restore()
 
             if False:
@@ -297,7 +300,7 @@ class LabelPrinter:
             ctx.move_to(self.width_px/2 - lw/2, h*RES-lh)
             PangoCairo.show_layout(ctx, layout)
 
-        self.height = h+self.TOP_MARGIN+self.BOTTOM_MARGIN
+        self.height = h +self.TOP_MARGIN #+self.BOTTOM_MARGIN
 
     def print(self, preview=False):
         self.setup_page()
