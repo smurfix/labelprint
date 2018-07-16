@@ -23,14 +23,20 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import Gtk, Pango, GObject, Gdk, Gio, PangoCairo, GLib, GdkPixbuf
 Gdk.threads_init()
 
+import trio
+import trio_amqp
+import click
+import threading
 import sys
 import math
 import cairo
+import json
 import PIL
 import PIL.ImageOps
 import PIL.ImageChops
 import barcode as pybars
 import io
+from threading import Thread
 from barcode.writer import ImageWriter
 if ImageWriter is None:
     raise RuntimeError("You need to install PIL")
@@ -39,35 +45,35 @@ RES_I = 72
 RES = RES_I/2.54 # dots per mm
 INIT_FONTSIZE=200
 
-SETTINGS = (
-('cover-after', 'none'),
-('print-at', 'now'),
-('scale', '100'),
-('reverse', 'false'),
-('print-pages', 'all'),
-('print-at-time', ''),
-('cups-PrintQuality', 'Fast'),
-('cups-RollFedMedia', 'Roll'),
-('cups-job-sheets', 'none,none'),
-('cups-SoftwareMirror', 'False'),
-('cups-ConcatPages', 'False'),
-('cups-LabelPreamble', 'True'),
-('cups-Align', 'Right'),
-('cups-job-priority', '50'),
-('cups-AdvanceDistance', '1Small'),
-('collate', 'false'),
-('cups-PrintDensity', '0PrinterDefault'),
-('cups-CutMedia', 'LabelEnd'),
-('cups-BytesPerLine', '90'),
-('cups-NegativePrint', 'False'),
-('cups-MirrorPrint', 'False'),
-('n-copies', '1'),
-('cover-before', 'none'),
-('number-up', '1'),
-('page-set', 'all'),
-('cups-number-up', '1'),
-('printer', 'QL-560'),
-)
+SETTINGS = {
+    'cover-after': 'none',
+    'print-at': 'now',
+    'scale': '100',
+    'reverse': 'false',
+    'print-pages': 'all',
+    'print-at-time': '',
+    'cups-PrintQuality': 'Fast',
+    'cups-RollFedMedia': 'Roll',
+    'cups-job-sheets': 'none,none',
+    'cups-SoftwareMirror': 'False',
+    'cups-ConcatPages': 'False',
+    'cups-LabelPreamble': 'True',
+    'cups-Align': 'Right',
+    'cups-job-priority': '50',
+    'cups-AdvanceDistance': '1Small',
+    'collate': 'false',
+    'cups-PrintDensity': '0PrinterDefault',
+    'cups-CutMedia': 'LabelEnd',
+    'cups-BytesPerLine': '90',
+    'cups-NegativePrint': 'False',
+    'cups-MirrorPrint': 'False',
+    'n-copies': '1',
+    'cover-before': 'none',
+    'number-up': '1',
+    'page-set': 'all',
+    'cups-number-up': '1',
+    'printer': 'endlos_',
+}
 
 # https://stackoverflow.com/questions/7610159/convert-pil-image-to-cairo-imagesurface
 def pil2cairo(im):
@@ -94,12 +100,6 @@ def pil2cairo(im):
 
 print_text = None
 print_barcode = ""
-if len(sys.argv) > 1:
-    print_text = []
-    with open(sys.argv[1], "r") as f:
-        print_barcode = f.readline().strip()
-        for x in f.readlines():
-            print_text.append(x.strip())
 
 def get_code(s):
     if any(1 for x in s if ord(x) > 127 or ord(x) < 32):
@@ -171,9 +171,10 @@ class LabelPrinter:
         setup = self.get_page_setup()
         if force or self.selected_printer is None:
             settings = Gtk.PrintSettings()
-            for a,b in SETTINGS:
+            for a,b in SETTINGS.items():
                 settings.set(a,b)
-            settings.set_printer("QL-560")
+            if self.selected_printer is not None:
+                settings.set_printer(self.selected_printer)
             # show print dialog
             op = Gtk.PrintOperation()
             op.set_unit(Gtk.Unit.MM)
@@ -322,7 +323,7 @@ class LabelPrinter:
         op.connect("begin_print", self.begin_print)
         op.connect("draw_page", self.draw_page)
 
-        res = op.run(Gtk.PrintOperationAction.PREVIEW if preview else Gtk.PrintOperationAction.PRINT_DIALOG)
+        res = op.run(Gtk.PrintOperationAction.PREVIEW if preview else Gtk.PrintOperationAction.PRINT)
     
     def scan_print(self, operation, context):
         width = context.get_width()
@@ -360,6 +361,7 @@ APPVERSION="0.1"
 
 class LabelUI(object):
     prn = None
+    amqp = None
     _reflow_timer = None
     
     def __init__(self):
@@ -493,6 +495,11 @@ class LabelUI(object):
 
     def on_main_destroy(self,window):
         # main window goes away
+        self._quit()
+
+    def _quit(self):
+        if self.amqp is not None:
+            self.amqp.stop()
         Gtk.main_quit()
 
     def on_main_delete_event(self,window,event):
@@ -502,9 +509,95 @@ class LabelUI(object):
     def on_quit_clicked(self,x):
         Gtk.main_quit()
 
-if __name__ == '__main__':
+class Listener:
+    gate = None
+
+    def __init__(self, ui, args):
+        self.ui = ui
+        self.args = args
+        self.done = trio.Event()
+
+    def _print(self, barcode, text):
+        """runs in GTK context"""
+        prn = self.ui.prn
+        bar = self.ui['txt_code'].set_text(barcode)
+        bar = self.ui['label_buf'].set_text('\n'.join(text))
+        prn.print(preview=True)
+
+    async def on_request(self, channel, body, envelope, properties):
+        try:
+            data = json.loads(body.decode("utf-8"))
+            GObject.idle_add(self._print,data['barcode'],data['text'])
+
+        except BaseException as exc:
+            res = str(exc)
+        else:
+            res = "OK"
+
+        if properties.reply_to:
+            await channel.basic_publish(
+                payload=bytes(res),
+                exchange_name='',
+                routing_key=properties.reply_to,
+                properties={ 'correlation_id': properties.correlation_id, },
+            )
+
+        await channel.basic_client_ack(delivery_tag=envelope.delivery_tag)
+
+    async def listener(self, task_status=trio.TASK_STATUS_IGNORED):
+
+        async with trio_amqp.connect_amqp(host=self.args['host'], login=self.args['login'], password=self.args['password'], virtualhost=self.args['vhost']) as protocol:
+            async with protocol.new_channel() as channel:
+
+                await channel.exchange_declare(self.args['exchange'], "topic")
+                q = await channel.queue_declare(exclusive=True)
+                await channel.queue_bind(q['queue'], self.args['exchange'], routing_key=self.args['route'])
+                await channel.basic_qos(prefetch_count=1, prefetch_size=0, connection_global=False)
+            
+                async with channel.new_consumer(queue_name=q['queue']) as listener:
+                    task_status.started()
+                    async for body, envelope, properties in listener:
+                        await self.on_request(channel, body, envelope, properties)
+
+    async def _in_trio(self, done):
+        self.gate = trio.hazmat.current_trio_token().run_sync_soon
+
+        async with trio.open_nursery() as nursery:
+            await nursery.start(self.listener)
+            done.set()
+            await self.done.wait()
+
+    def _start_trio(self, done):
+        trio.run(self._in_trio, done)
+
+    def start(self):
+        done = threading.Event()
+        Thread(target=self._start_trio, args=(done,)).start()
+
+    def stop(self):
+        if self.gate is not None and self.done is not None:
+            try:
+                self.gate(self.done.set)
+            except trio.RunFinishedError:
+                pass
+
+@click.command()
+@click.option('-p','--printer', help="Print queue to use by default", default="Label")
+@click.option('-h','--host', help="AMQP host to connect to", default="localhost")
+@click.option('-l','--login', help="AMQP user name", default="guest")
+@click.option('-p','--password', help="AMQP password", default="guest")
+@click.option('-v','--vhost', help="AMQP virtual host to use", default="/")
+@click.option('-x','--exchange', help="Exchange to link to", default="")
+@click.option('-r','--route', help="Routing key to listen on", default="")
+def main(printer, **args):
     ui = LabelUI()
     ui.init_done()
 
+    ui.amqp = Listener(ui, args)
+    ui.amqp.start()
+
     Gtk.main()
+
+if __name__ == '__main__':
+    main()
 
