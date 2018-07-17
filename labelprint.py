@@ -472,6 +472,9 @@ class LabelUI(object):
         pass
 
     def on_print_clicked(self,*foo):
+        GObject.idle_add(self._on_print)
+
+    def _on_print(self):
         self.prn.print(preview=self.did_shift)
         self.reflow()
 
