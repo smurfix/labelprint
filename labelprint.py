@@ -130,8 +130,9 @@ class LabelPrinter:
     content = None # RecordingSurface
     font_size = 0
 
-    def __init__(self):
+    def __init__(self, ui):
         super().__init__()
+        self.ui = ui
         self.set_width(38.0)
 
     @property
@@ -332,6 +333,8 @@ class LabelPrinter:
     
     def done_printing(self, *a):
         print("DONE PRINT",a)
+        if self.ui is not None:
+            self.ui.check_print_job()
 
     def scan_print(self, operation, context):
         width = context.get_width()
@@ -369,16 +372,26 @@ APPVERSION="0.1"
 
 class LabelUI(GObject.GObject):    
     data = None
+    printing = False
 
     __gsignals__ = {
         'run_print': (GObject.SIGNAL_RUN_FIRST, None, (bool,))
     }
 
+    def check_print_job(self):
+        self.printing = False
+        if self.data:
+            self.emit("run_print", True)
+
     def do_run_print(self, preview):
         print("method for `run_print' called with argument", preview,self.data)
-        if self.data is not None:
-            self._print(self.data['barcode'],self.data['text'], preview)
-            self.data = None
+        if self.printing:
+            return
+        self.printing = True
+
+        if self.data:
+            data = self.data.pop(0)
+            self._print(data['barcode'],data['text'], preview)
         else:
             self.prn.print(preview)
 
@@ -403,7 +416,8 @@ class LabelUI(GObject.GObject):
     def __init__(self):
         #gnome.init(APPNAME, APPVERSION)
         super().__init__()
-        self.prn = LabelPrinter()
+        self.prn = LabelPrinter(self)
+        self.data = []
 
         self.widgets = Gtk.Builder()
         self.widgets.add_from_file(APPNAME+".glade")
@@ -544,7 +558,7 @@ class Listener:
         try:
             data = json.loads(body.decode("utf-8"))
             #GObject.idle_add(self._print,data['barcode'],data['text'])
-            self.ui.data = data
+            self.ui.data.append(data)
             GObject.idle_add(self.ui.emit, "run_print", True) # emit the signal
 
         except BaseException as exc:
