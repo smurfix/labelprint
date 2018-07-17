@@ -1,0 +1,5 @@
+barcode
+trio
+trio_amqp
+click
+pillow
