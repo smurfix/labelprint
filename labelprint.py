@@ -113,7 +113,7 @@ def get_code(s):
 #   else:
     return "Code128"
 
-class LabelPrinter:    
+class LabelPrinter:
     PAGE_WIDTH=38
     LEFT_MARGIN=1
     RIGHT_MARGIN=1
@@ -131,6 +131,7 @@ class LabelPrinter:
     font_size = 0
 
     def __init__(self):
+        super().__init__()
         self.set_width(38.0)
 
     @property
@@ -316,6 +317,7 @@ class LabelPrinter:
 
         setup = self.get_page_setup()
         op = Gtk.PrintOperation()
+        op.set_allow_async(True)
         op.set_default_page_setup(setup)
 
         op.set_print_settings(self.print_settings)
@@ -323,9 +325,14 @@ class LabelPrinter:
         op.set_unit(Gtk.Unit.MM)
         op.connect("begin_print", self.begin_print)
         op.connect("draw_page", self.draw_page)
+        op.connect("done", self.done_printing)
 
         res = op.run(Gtk.PrintOperationAction.PREVIEW if preview else Gtk.PrintOperationAction.PRINT)
+        print("PR",res)
     
+    def done_printing(self, *a):
+        print("DONE PRINT",a)
+
     def scan_print(self, operation, context):
         width = context.get_width()
         size_hint = INIT_FONTSIZE
@@ -360,13 +367,42 @@ class LabelPrinter:
 APPNAME="labelprint"
 APPVERSION="0.1"
 
-class LabelUI(object):
+class LabelUI(GObject.GObject):    
+    data = None
+
+    __gsignals__ = {
+        'run_print': (GObject.SIGNAL_RUN_FIRST, None, (bool,))
+    }
+
+    def do_run_print(self, preview):
+        print("method for `run_print' called with argument", preview,self.data)
+        if self.data is not None:
+            self._print(self.data['barcode'],self.data['text'], preview)
+            self.data = None
+        else:
+            self.prn.print(preview)
+
+    def _print(self, barcode, text, preview):
+        """runs in GTK context"""
+        text = '\n'.join(text)
+        prn = self.prn
+
+        self['txt_code'].set_text(barcode)
+        prn.set_barcode(barcode)
+
+        self['label_buf'].set_text(text)
+        prn.set_text(text)
+
+        self.reflow()
+        prn.print(preview=preview)
+
     prn = None
     amqp = None
     _reflow_timer = None
     
     def __init__(self):
         #gnome.init(APPNAME, APPVERSION)
+        super().__init__()
         self.prn = LabelPrinter()
 
         self.widgets = Gtk.Builder()
@@ -472,11 +508,13 @@ class LabelUI(object):
         pass
 
     def on_print_clicked(self,*foo):
-        GObject.idle_add(self._on_print)
+        #GObject.idle_add(self._on_print)
+        self.emit("run_print", self.did_shift) # emit the signal "my_signal", with the
+                             # argument 42
 
-    def _on_print(self):
-        self.prn.print(preview=self.did_shift)
-        self.reflow()
+#    def _on_print(self):
+#        self.prn.print(preview=self.did_shift)
+#        self.reflow()
 
     def on_main_destroy(self,window):
         # main window goes away
@@ -502,24 +540,12 @@ class Listener:
         self.args = args
         self.done = trio.Event()
 
-    def _print(self, barcode, text):
-        """runs in GTK context"""
-        text = '\n'.join(text)
-        prn = self.ui.prn
-
-        self.ui['txt_code'].set_text(barcode)
-        prn.set_barcode(barcode)
-
-        self.ui['label_buf'].set_text(text)
-        prn.set_text(text)
-
-        self.ui.reflow()
-        prn.print(preview=True)
-
     async def on_request(self, channel, body, envelope, properties):
         try:
             data = json.loads(body.decode("utf-8"))
-            GObject.idle_add(self._print,data['barcode'],data['text'])
+            #GObject.idle_add(self._print,data['barcode'],data['text'])
+            self.ui.data = data
+            GObject.idle_add(self.ui.emit, "run_print", True) # emit the signal
 
         except BaseException as exc:
             res = str(exc)
