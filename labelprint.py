@@ -492,7 +492,7 @@ class LabelUI(object):
         return False
 
     def on_quit_clicked(self,x):
-        Gtk.main_quit()
+        self._quit()
 
 class Listener:
     gate = None
@@ -558,6 +558,7 @@ class Listener:
             await nursery.start(self.listener)
             done.set()
             await self.done.wait()
+            nursery.cancel_scope.cancel()
 
     def _start_trio(self, done):
         trio.run(self._in_trio, done)
@@ -565,6 +566,7 @@ class Listener:
     def start(self):
         done = threading.Event()
         threading.Thread(target=self._start_trio, args=(done,)).start()
+        done.wait()
 
     def stop(self):
         if self.gate is not None and self.done is not None:
@@ -595,7 +597,11 @@ def main(printer, **args):
         ui.amqp = Listener(ui, args)
         ui.amqp.start()
 
-    Gtk.main()
+    try:
+        Gtk.main()
+    except KeyboardInterrupt:
+        if ui.amqp is not None:
+            ui.amqp.stop()
 
 if __name__ == '__main__':
     main()
