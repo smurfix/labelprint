@@ -23,10 +23,13 @@ gi.require_version('PangoCairo', '1.0')
 from gi.repository import Gtk, Pango, GObject, Gdk, Gio, PangoCairo, GLib, GdkPixbuf
 Gdk.threads_init()
 
-import trio
-import trio_amqp
+try:
+    import trio
+    import trio_amqp
+    import threading
+except ImportError:
+    threading = None
 import click
-import threading
 import sys
 import math
 import cairo
@@ -36,7 +39,6 @@ import PIL.ImageOps
 import PIL.ImageChops
 import barcode as pybars
 import io
-from threading import Thread
 from barcode.writer import ImageWriter
 if ImageWriter is None:
     raise RuntimeError("You need to install PIL")
@@ -72,7 +74,6 @@ SETTINGS = {
     'number-up': '1',
     'page-set': 'all',
     'cups-number-up': '1',
-    'printer': 'endlos_',
 }
 
 # https://stackoverflow.com/questions/7610159/convert-pil-image-to-cairo-imagesurface
@@ -560,7 +561,7 @@ class Listener:
 
     def start(self):
         done = threading.Event()
-        Thread(target=self._start_trio, args=(done,)).start()
+        threading.Thread(target=self._start_trio, args=(done,)).start()
 
     def stop(self):
         if self.gate is not None and self.done is not None:
@@ -570,19 +571,26 @@ class Listener:
                 pass
 
 @click.command()
-@click.option('-p','--printer', help="Print queue to use by default", default="Label")
-@click.option('-h','--host', help="AMQP host to connect to", default="localhost")
+@click.option('-o','--printer', help="Print queue to use by default", default="")
+@click.option('-h','--host', help="AMQP host to connect to", default="")
 @click.option('-l','--login', help="AMQP user name", default="guest")
 @click.option('-p','--password', help="AMQP password", default="guest")
 @click.option('-v','--vhost', help="AMQP virtual host to use", default="/")
 @click.option('-x','--exchange', help="Exchange to link to", default="")
 @click.option('-r','--route', help="Routing key to listen on", default="")
 def main(printer, **args):
+    if printer:
+        SETTINGS['printer'] = printer
+
     ui = LabelUI()
     ui.init_done()
 
-    ui.amqp = Listener(ui, args)
-    ui.amqp.start()
+    if args.get('host',''):
+        if threading is None:
+            print("I could not import Trio-AMQP -- remote printing disabled", file=sys.stderr)
+            sys.exit(1)
+        ui.amqp = Listener(ui, args)
+        ui.amqp.start()
 
     Gtk.main()
 
