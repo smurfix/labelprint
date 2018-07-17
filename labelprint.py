@@ -630,5 +630,5 @@ def main(printer, **args):
             ui.amqp.stop()
 
 if __name__ == '__main__':
-    main()
+    main(standalone_mode=False)
 
