@@ -500,9 +500,16 @@ class Listener:
 
     def _print(self, barcode, text):
         """runs in GTK context"""
+        text = '\n'.join(text)
         prn = self.ui.prn
-        bar = self.ui['txt_code'].set_text(barcode)
-        bar = self.ui['label_buf'].set_text('\n'.join(text))
+
+        self.ui['txt_code'].set_text(barcode)
+        prn.set_barcode(barcode)
+
+        self.ui['label_buf'].set_text(text)
+        prn.set_text(text)
+
+        self.ui.reflow()
         prn.print(preview=True)
 
     async def on_request(self, channel, body, envelope, properties):
