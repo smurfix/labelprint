@@ -382,7 +382,7 @@ class LabelUI(GObject.GObject):
     def check_print_job(self):
         self.printing = False
         if self.data:
-            self.emit("run_print", True)
+            self.emit("run_print", False)
 
     def do_run_print(self, preview):
         print("method for `run_print' called with argument", preview,self.data)
@@ -560,7 +560,7 @@ class Listener:
             data = json.loads(body.decode("utf-8"))
             #GObject.idle_add(self._print,data['barcode'],data['text'])
             self.ui.data.append(data)
-            GObject.idle_add(self.ui.emit, "run_print", True) # emit the signal
+            GObject.idle_add(self.ui.emit, "run_print", False) # emit the signal
 
         except BaseException as exc:
             res = str(exc)
