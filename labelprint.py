@@ -416,25 +416,6 @@ class LabelUI(object):
         self['txt_length'].set_text("%.1f mm" % (self.prn.height,))
         self['txt_fontsize'].set_text("%.1f pt" % (self.prn.font_size,))
 
-    def _set_prn(self):
-        txt = self['txt_code']
-        txt = txt.get_text()
-        self.prn.set_barcode(txt)
-
-        buf = self['label_buf']
-        txt = buf.get_text(buf.get_start_iter(),buf.get_end_iter(),False)
-        self.prn.set_text(txt)
-
-        pwg = self['pw_38']
-        for btn in pwg.get_group():
-            if not btn.get_active():
-                continue
-            w = float(Gtk.Buildable.get_name(btn)[3:])  # pw_###
-            self.prn.set_width(w)
-            break
-
-        self.reflow()
-        
     # events
 
     def on_draw_label(self, wid, ctx):
