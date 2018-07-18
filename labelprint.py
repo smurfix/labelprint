@@ -130,10 +130,11 @@ class LabelPrinter:
     content = None # RecordingSurface
     font_size = 0
 
-    def __init__(self, ui):
+    def __init__(self, ui, printer=None):
         super().__init__()
         self.ui = ui
         self.set_width(38.0)
+        self.selected_printer = printer
 
     @property
     def BAR_H(self):
@@ -414,10 +415,10 @@ class LabelUI(GObject.GObject):
     amqp = None
     _reflow_timer = None
     
-    def __init__(self):
+    def __init__(self, printer):
         #gnome.init(APPNAME, APPVERSION)
         super().__init__()
-        self.prn = LabelPrinter(self)
+        self.prn = LabelPrinter(self, printer)
         self.data = []
 
         self.widgets = Gtk.Builder()
@@ -628,7 +629,7 @@ def main(printer, **args):
     if printer:
         SETTINGS['printer'] = printer
 
-    ui = LabelUI()
+    ui = LabelUI(printer)
     ui.init_done()
 
     if args.get('host',''):
